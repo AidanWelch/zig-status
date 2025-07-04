@@ -2,6 +2,23 @@ const std = @import("std");
 
 const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s;
 
+const WidthInputTag = enum {
+    pixels,
+    string,
+};
+
+pub const WidthInput = union(WidthInputTag) {
+    pixels: i32,
+    string: []const u8,
+
+    pub fn jsonStringify(self: *const WidthInput, jw: anytype) !void {
+        switch (self.*) {
+            .pixels => |pixels| try jw.write(pixels),
+            .string => |string| try jw.write(string),
+        }
+    }
+};
+
 // Taken from `man swaybar-protocol(7)`
 pub const WidgetResult = struct {
     // The  text  that will be displayed.
@@ -47,10 +64,7 @@ pub const WidgetResult = struct {
     // pixels or a string can be given to
     // allow  for  it  to  be  calculated
     // based on the width of the string.
-    min_width: ?union {
-        pixels: i32,
-        string: []const u8,
-    },
+    min_width: ?WidthInput,
 
     // If the text does not span the full
     // width of the block, this specifies
@@ -176,7 +190,7 @@ pub fn create(
         .stdout = std.io.getStdOut().writer(),
         .arena = std.heap.ArenaAllocator.init(alloc),
         .widget_fns = widget_fns,
-        .widget_results = undefined,
+        .widget_results = std.mem.zeroes([widget_fns.len]WidgetResult),
     };
 }
 
@@ -191,6 +205,7 @@ pub fn run(
 
 fn test_widget(wg: *std.Thread.WaitGroup, result: *WidgetResult) void {
     result.full_text = "test";
+    result.min_width = .{ .pixels = 5 };
     wg.finish();
 }
 
@@ -204,10 +219,19 @@ test "test calling widgets" {
         },
     );
     for (self.widget_results) |res| {
-        try std.testing.expect(!std.mem.eql(u8, "test", res.full_text.?));
+        try std.testing.expectEqual(null, res.full_text);
     }
     self.update_results();
     for (self.widget_results) |res| {
+        const resJson = try std.json.stringifyAlloc(
+            std.testing.allocator,
+            res,
+            .{
+                .emit_null_optional_fields = false,
+            },
+        );
+        defer std.testing.allocator.free(resJson);
+        std.debug.print("{s}\n", .{resJson});
         try std.testing.expectEqual("test", res.full_text.?);
     }
 }
