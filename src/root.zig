@@ -1,6 +1,8 @@
 const std = @import("std");
+pub const Widgets = @import("widgets/root.zig");
 
 const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s;
+const ARENA_RETAIN_LIMIT: usize = 1024 * 1024; // retain 1mb
 
 const WidthInputTag = enum {
     pixels,
@@ -116,11 +118,14 @@ pub const WidgetResult = struct {
     markup: ?[]const u8,
 };
 
+// This function must always called `wg.finish()`
 pub const WidgetFn = *const fn (
     wg: *std.Thread.WaitGroup,
     alloc: std.mem.Allocator,
     result: *WidgetResult,
-) void;
+) anyerror!void;
+
+const stdout = std.io.getStdOut().writer();
 
 pub fn Status(comptime widget_fns: anytype) type {
     const widget_count = widget_fns_length(widget_fns);
@@ -135,51 +140,104 @@ pub fn Status(comptime widget_fns: anytype) type {
             self.arena.deinit();
         }
 
-        fn write_error(self: *Self, comptime error_msg: []const u8) void {
-            for (0..widget_count) |i| {
-                self.widget_results[i].full_text = error_msg;
-            }
+        pub fn reset(self: *Self) void {
+            _ = self.arena.reset(.{
+                .retain_with_limit = ARENA_RETAIN_LIMIT,
+            });
         }
 
-        pub fn update_results(self: *Self) void {
+        const Header = struct {
+            version: i32, // Must be `1`
+
+            // Whether to recieve click information to stdin
+            click_events: ?bool,
+
+            // The signal that swaybar should send to continue
+            // processing
+            // Defaults to `std.posix.SIG.CONT`
+            cont_signal: ?i32,
+
+            // The signal that swaybar should send to stop
+            // processing
+            // Defaults to `std.posix.SIG.STOP`
+            stop_signal: ?i32,
+        };
+
+        pub fn render_headers(self: *Self) !void {
+            const json = try std.json.stringifyAlloc(
+                self.arena.allocator(),
+                Header{
+                    .version = 1,
+                    .click_events = null,
+                    .cont_signal = null,
+                    .stop_signal = null,
+                },
+                .{
+                    .emit_null_optional_fields = false,
+                },
+            );
+
+            try stdout.writeAll(json);
+            try stdout.writeAll("\n[");
+        }
+
+        pub fn update_results(self: *Self) !void {
             var wg: std.Thread.WaitGroup = .{};
             for (0..widget_count) |i| {
                 wg.start();
-                self.widget_fns[i](&wg, self.arena.allocator(), &self.widget_results[i]); }
+                try self.widget_fns[i](
+                    &wg,
+                    self.arena.allocator(),
+                    &self.widget_results[i],
+                );
+            }
             wg.wait();
         }
 
-        pub fn result_loop(self: *Self) void {
-            const start = std.time.Instant.now() catch
-                return self.write_error("clock error at fetch start");
+        pub fn render_results(self: *Self) !void {
+            const resJson = try std.json.stringifyAlloc(
+                self.arena.allocator(),
+                self.widget_results,
+                .{
+                    .emit_null_optional_fields = false,
+                },
+            );
 
-            self.update_results();
+            try stdout.writeAll(resJson);
+            try stdout.writeByte(',');
+        }
 
-            const end = std.time.Instant.now() catch
-                return self.write_error("clocke error at fetch end");
+        pub fn result_loop(self: *Self) !void {
+            const start = try std.time.Instant.now();
+
+            try self.update_results();
+            try self.render_results();
+            self.reset();
+
+            const end = try std.time.Instant.now();
 
             const since = end.since(start);
             if (since < UPDATE_INTERVAL_NANOSECONDS) {
                 std.time.sleep(UPDATE_INTERVAL_NANOSECONDS - since);
             }
 
-            self.result_loop();
+            try self.result_loop();
         }
     };
 }
 
 fn widget_fns_length(arr: anytype) comptime_int {
-    const error_msg =
-        "widget_fns requires a comptime array of WidgetFn function pointers";
     const type_info = @typeInfo(@TypeOf(arr));
     switch (type_info) {
         .array => |array_type| {
             if (array_type.child != WidgetFn) {
-                @compileError(error_msg);
+                @compileError("the input array must be of WidgetFn function pointers");
             }
             return array_type.len;
         },
-        else => @compileError(error_msg),
+        else => @compileError(
+            "widget_fns requires a comptime array of WidgetFn function pointers",
+        ),
     }
 }
 
@@ -200,16 +258,14 @@ pub fn run(
     alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
     comptime widget_fns: anytype,
-) void {
+) !void {
     var status = create(alloc, widget_fns);
-    status.result_loop();
+    try status.render_headers();
+    status.reset();
+    try status.result_loop();
 }
 
-fn test_widget(
-    wg: *std.Thread.WaitGroup, 
-    _: std.mem.Allocator, 
-    result: *WidgetResult
-) void {
+fn test_widget(wg: *std.Thread.WaitGroup, _: std.mem.Allocator, result: *WidgetResult) !void {
     result.full_text = "test";
     result.min_width = .{ .pixels = 5 };
     wg.finish();
@@ -224,20 +280,15 @@ test "test calling widgets" {
             test_widget,
         },
     );
+    try self.render_headers();
+    self.reset();
     for (self.widget_results) |res| {
         try std.testing.expectEqual(null, res.full_text);
     }
-    self.update_results();
+    try self.update_results();
     for (self.widget_results) |res| {
         try std.testing.expectEqual("test", res.full_text.?);
     }
-    const resJson = try std.json.stringifyAlloc(
-        std.testing.allocator,
-        self.widget_results,
-        .{
-            .emit_null_optional_fields = false,
-        },
-    );
-    defer std.testing.allocator.free(resJson);
-    std.debug.print("{s}\n", .{resJson});
+    try self.render_results();
+    self.deinit();
 }
