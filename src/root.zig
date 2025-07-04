@@ -176,6 +176,7 @@ pub fn Status(comptime widget_fns: anytype) type {
                     .emit_null_optional_fields = false,
                 },
             );
+            defer _ = self.arena.reset(.free_all);
 
             try stdout.writeAll(json);
             try stdout.writeAll("\n[");
@@ -261,7 +262,6 @@ pub fn run(
 ) !void {
     var status = create(alloc, widget_fns);
     try status.render_headers();
-    status.reset();
     try status.result_loop();
 }
 
