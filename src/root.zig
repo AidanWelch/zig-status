@@ -2,87 +2,104 @@ const std = @import("std");
 
 const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s;
 
+// Taken from `man swaybar-protocol(7)`
 pub const WidgetResult = struct {
-       ┌───────────────────────┬───────────────────┬────────────────────────────────────┐
-       │       PROPERTY        │     DATA TYPE     │            DESCRIPTION             │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │       full_text       │      string       │ The  text  that will be displayed. │
-       │                       │                   │ If  missing,  the  block  will  be │
-       │                       │                   │ skipped.                           │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │      short_text       │      string       │ If  given and the text needs to be │
-       │                       │                   │ shortened due to space, this  will │
-       │                       │                   │ be displayed instead of full_text  │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │         color         │      string       │ The text color to use in #RRGGBBAA │
-       │                       │                   │ or #RRGGBB notation                │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │      background       │      string       │ The background color for the block │
-       │                       │                   │ in #RRGGBBAA or #RRGGBB notation   │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │        border         │      string       │ The  border color for the block in │
-       │                       │                   │ #RRGGBBAA or #RRGGBB notation      │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │      border_top       │      integer      │ The height in pixels  of  the  top │
-       │                       │                   │ border. The default is 1           │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │     border_bottom     │      integer      │ The height in pixels of the bottom │
-       │                       │                   │ border. The default is 1           │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │      border_left      │      integer      │ The  width  in  pixels of the left │
-       │                       │                   │ border. The default is 1           │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │     border_right      │      integer      │ The width in pixels of  the  right │
-       │                       │                   │ border. The default is 1           │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │       min_width       │ integer or string │ The  minimum  width to use for the │
-       │                       │                   │ block. This can either be given in │
-       │                       │                   │ pixels or a string can be given to │
-       │                       │                   │ allow  for  it  to  be  calculated │
-       │                       │                   │ based on the width of the string.  │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │         align         │      string       │ If the text does not span the full │
-       │                       │                   │ width of the block, this specifies │
-       │                       │                   │ how the text should be aligned in‐ │
-       │                       │                   │ side  of  the  block.  This can be │
-       │                       │                   │ left (default), right, or center.  │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │         name          │      string       │ A name for the block. This is only │
-       │                       │                   │ used to  identify  the  block  for │
-       │                       │                   │ click  events.  If set, each block │
-       │                       │                   │ should have a unique name and  in‐ │
-       │                       │                   │ stance pair.                       │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │       instance        │      string       │ The  instance  of the name for the │
-       │                       │                   │ block. This is only used to  iden‐ │
-       │                       │                   │ tify  the  block for click events. │
-       │                       │                   │ If set, each block should  have  a │
-       │                       │                   │ unique name and instance pair.     │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │        urgent         │      boolean      │ Whether  the  block should be dis‐ │
-       │                       │                   │ played as urgent. Currently  sway‐ │
-       │                       │                   │ bar utilizes the colors set in the │
-       │                       │                   │ sway  config  for urgent workspace │
-       │                       │                   │ buttons. See sway-bar(5) for  more │
-       │                       │                   │ information  on bar color configu‐ │
-       │                       │                   │ ration.                            │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │       separator       │      boolean      │ Whether the bar  separator  should │
-       │                       │                   │ be  drawn  after  the  block.  See │
-       │                       │                   │ sway-bar(5) for  more  information │
-       │                       │                   │ on how to set the separator text.  │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │ separator_block_width │      integer      │ The  amount  of  pixels  to  leave │
-       │                       │                   │ blank after the block. The separa‐ │
-       │                       │                   │ tor text will  be  displayed  cen‐ │
-       │                       │                   │ tered  in this gap. The default is │
-       │                       │                   │ 9 pixels.                          │
-       ├───────────────────────┼───────────────────┼────────────────────────────────────┤
-       │        markup         │      string       │ The type of  markup  to  use  when │
-       │                       │                   │ parsing  the  text  for the block. │
-       │                       │                   │ This can either be pango  or  none │
-       │                       │                   │ (default).                         │
-       └───────────────────────┴───────────────────┴────────────────────────────────────┘
+    // The  text  that will be displayed.
+    // If  missing,  the  block  will  be
+    // skipped.
+    full_text: []const u8,
+
+    // If  given and the text needs to be
+    // shortened due to space, this  will
+    // be displayed instead of full_text
+    short_text: []const u8,
+
+    // The text color to use in #RRGGBBAA
+    // or #RRGGBB notation
+    color: []const u8,
+
+    // The background color for the block
+    // in #RRGGBBAA or #RRGGBB notation
+    background: []const u8,
+
+    // The  border color for the block in
+    // #RRGGBBAA or #RRGGBB notation
+    border: []const u8,
+
+    // The height in pixels  of  the  top
+    // border. The default is 1
+    border_top: i32,
+
+    // The height in pixels of the bottom
+    // border. The default is 1
+    border_bottom: i32,
+
+    // The  width  in  pixels of the left
+    // border. The default is 1
+    border_left: i32,
+
+    // The width in pixels of  the  right
+    // border. The default is 1
+    border_right: i32,
+
+    // The  minimum  width to use for the
+    // block. This can either be given in
+    // pixels or a string can be given to
+    // allow  for  it  to  be  calculated
+    // based on the width of the string.
+    min_width: union {
+        pixels: i32,
+        string: []const u8,
+    },
+
+    // If the text does not span the full
+    // width of the block, this specifies
+    // how the text should be aligned in‐
+    // side  of  the  block.  This can be
+    // left (default), right, or center.
+    @"align": []const u8,
+
+    // A name for the block. This is only
+    // used to  identify  the  block  for
+    // click  events.  If set, each block
+    // should have a unique name and  in‐
+    // stance pair.
+    name: []const u8,
+
+    // The  instance  of the name for the
+    // block. This is only used to  iden‐
+    // tify  the  block for click events.
+    // If set, each block should  have  a
+    // unique name and instance pair.
+    instance: []const u8,
+
+    // Whether  the  block should be dis‐
+    // played as urgent. Currently  sway‐
+    // bar utilizes the colors set in the
+    // sway  config  for urgent workspace
+    // buttons. See sway-bar(5) for  more
+    // information  on bar color configu‐
+    // ration.
+    urgent: bool,
+
+    // Whether the bar  separator  should
+    // be  drawn  after  the  block.  See
+    // sway-bar(5) for  more  information
+    // on how to set the separator text.
+    separator: bool,
+
+    // The  amount  of  pixels  to  leave
+    // blank after the block. The separa‐
+    // tor text will  be  displayed  cen‐
+    // tered  in this gap. The default is
+    // 9 pixels.
+    separator_block_width: i32,
+
+    // The type of  markup  to  use  when
+    // parsing  the  text  for the block.
+    // This can either be pango  or  none
+    // (default).
+    markup: []const u8,
 };
 
 pub const WidgetFn = *const fn (
@@ -119,14 +136,12 @@ pub fn Status(comptime widget_fns: anytype) type {
         }
 
         pub fn result_loop(self: *Self) void {
-            const start = std.time.Instant.now()
-                catch return self.write_error("clock error at fetch start");
-            
+            const start = std.time.Instant.now() catch return self.write_error("clock error at fetch start");
+
             self.update_results();
 
-            const end = std.time.Instant.now() 
-                catch return self.write_error("clocke error at fetch end");
-            
+            const end = std.time.Instant.now() catch return self.write_error("clocke error at fetch end");
+
             const since = end.since(start);
             if (since < UPDATE_INTERVAL_NANOSECONDS) {
                 std.time.sleep(UPDATE_INTERVAL_NANOSECONDS - since);
@@ -138,22 +153,22 @@ pub fn Status(comptime widget_fns: anytype) type {
 }
 
 fn widget_fns_length(arr: anytype) comptime_int {
-    const error_msg = 
-        "widget_fns requires a comptime array of WidgetFn function pointers"; 
+    const error_msg =
+        "widget_fns requires a comptime array of WidgetFn function pointers";
     const type_info = @typeInfo(@TypeOf(arr));
     switch (type_info) {
         .array => |array_type| {
-           if (array_type.child != WidgetFn) {
-               @compileError(error_msg);
+            if (array_type.child != WidgetFn) {
+                @compileError(error_msg);
             }
-           return array_type.len;
+            return array_type.len;
         },
         else => @compileError(error_msg),
     }
 }
 
 pub fn create(
-    alloc: std.mem.Allocator, 
+    alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
     comptime widget_fns: anytype,
 ) Status(widget_fns) {
@@ -161,13 +176,12 @@ pub fn create(
         .stdout = std.io.getStdOut().writer(),
         .arena = std.heap.ArenaAllocator.init(alloc),
         .widget_fns = widget_fns,
-        .widget_results = undefined, 
+        .widget_results = undefined,
     };
 }
 
-
 pub fn run(
-    alloc: std.mem.Allocator, 
+    alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
     comptime widget_fns: anytype,
 ) void {
@@ -175,7 +189,7 @@ pub fn run(
     status.result_loop();
 }
 
-fn test_widget (wg: *std.Thread.WaitGroup, result: *WidgetResult) void {
+fn test_widget(wg: *std.Thread.WaitGroup, result: *WidgetResult) void {
     result.full_text = "test";
     wg.finish();
 }
@@ -183,16 +197,14 @@ fn test_widget (wg: *std.Thread.WaitGroup, result: *WidgetResult) void {
 test "test calling widgets" {
     var self = create(
         std.testing.allocator,
-        [_]WidgetFn { 
+        [_]WidgetFn{
             test_widget,
             test_widget,
             test_widget,
         },
     );
     for (self.widget_results) |res| {
-        try std.testing.expect(
-            !std.mem.eql(u8, "test", res.full_text)
-        );
+        try std.testing.expect(!std.mem.eql(u8, "test", res.full_text));
     }
     self.update_results();
     for (self.widget_results) |res| {
