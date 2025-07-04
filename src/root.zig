@@ -7,47 +7,47 @@ pub const WidgetResult = struct {
     // The  text  that will be displayed.
     // If  missing,  the  block  will  be
     // skipped.
-    full_text: []const u8,
+    full_text: ?[]const u8,
 
     // If  given and the text needs to be
     // shortened due to space, this  will
     // be displayed instead of full_text
-    short_text: []const u8,
+    short_text: ?[]const u8,
 
     // The text color to use in #RRGGBBAA
     // or #RRGGBB notation
-    color: []const u8,
+    color: ?[]const u8,
 
     // The background color for the block
     // in #RRGGBBAA or #RRGGBB notation
-    background: []const u8,
+    background: ?[]const u8,
 
     // The  border color for the block in
     // #RRGGBBAA or #RRGGBB notation
-    border: []const u8,
+    border: ?[]const u8,
 
     // The height in pixels  of  the  top
     // border. The default is 1
-    border_top: i32,
+    border_top: ?i32,
 
     // The height in pixels of the bottom
     // border. The default is 1
-    border_bottom: i32,
+    border_bottom: ?i32,
 
     // The  width  in  pixels of the left
     // border. The default is 1
-    border_left: i32,
+    border_left: ?i32,
 
     // The width in pixels of  the  right
     // border. The default is 1
-    border_right: i32,
+    border_right: ?i32,
 
     // The  minimum  width to use for the
     // block. This can either be given in
     // pixels or a string can be given to
     // allow  for  it  to  be  calculated
     // based on the width of the string.
-    min_width: union {
+    min_width: ?union {
         pixels: i32,
         string: []const u8,
     },
@@ -57,21 +57,21 @@ pub const WidgetResult = struct {
     // how the text should be aligned in‐
     // side  of  the  block.  This can be
     // left (default), right, or center.
-    @"align": []const u8,
+    @"align": ?[]const u8,
 
     // A name for the block. This is only
     // used to  identify  the  block  for
     // click  events.  If set, each block
     // should have a unique name and  in‐
     // stance pair.
-    name: []const u8,
+    name: ?[]const u8,
 
     // The  instance  of the name for the
     // block. This is only used to  iden‐
     // tify  the  block for click events.
     // If set, each block should  have  a
     // unique name and instance pair.
-    instance: []const u8,
+    instance: ?[]const u8,
 
     // Whether  the  block should be dis‐
     // played as urgent. Currently  sway‐
@@ -80,26 +80,26 @@ pub const WidgetResult = struct {
     // buttons. See sway-bar(5) for  more
     // information  on bar color configu‐
     // ration.
-    urgent: bool,
+    urgent: ?bool,
 
     // Whether the bar  separator  should
     // be  drawn  after  the  block.  See
     // sway-bar(5) for  more  information
     // on how to set the separator text.
-    separator: bool,
+    separator: ?bool,
 
     // The  amount  of  pixels  to  leave
     // blank after the block. The separa‐
     // tor text will  be  displayed  cen‐
     // tered  in this gap. The default is
     // 9 pixels.
-    separator_block_width: i32,
+    separator_block_width: ?i32,
 
     // The type of  markup  to  use  when
     // parsing  the  text  for the block.
     // This can either be pango  or  none
     // (default).
-    markup: []const u8,
+    markup: ?[]const u8,
 };
 
 pub const WidgetFn = *const fn (
@@ -204,10 +204,10 @@ test "test calling widgets" {
         },
     );
     for (self.widget_results) |res| {
-        try std.testing.expect(!std.mem.eql(u8, "test", res.full_text));
+        try std.testing.expect(!std.mem.eql(u8, "test", res.full_text.?));
     }
     self.update_results();
     for (self.widget_results) |res| {
-        try std.testing.expectEqual("test", res.full_text);
+        try std.testing.expectEqual("test", res.full_text.?);
     }
 }
