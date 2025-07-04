@@ -118,6 +118,7 @@ pub const WidgetResult = struct {
 
 pub const WidgetFn = *const fn (
     wg: *std.Thread.WaitGroup,
+    alloc: std.mem.Allocator,
     result: *WidgetResult,
 ) void;
 
@@ -144,17 +145,18 @@ pub fn Status(comptime widget_fns: anytype) type {
             var wg: std.Thread.WaitGroup = .{};
             for (0..widget_count) |i| {
                 wg.start();
-                self.widget_fns[i](&wg, &self.widget_results[i]);
-            }
+                self.widget_fns[i](&wg, self.arena.allocator(), &self.widget_results[i]); }
             wg.wait();
         }
 
         pub fn result_loop(self: *Self) void {
-            const start = std.time.Instant.now() catch return self.write_error("clock error at fetch start");
+            const start = std.time.Instant.now() catch
+                return self.write_error("clock error at fetch start");
 
             self.update_results();
 
-            const end = std.time.Instant.now() catch return self.write_error("clocke error at fetch end");
+            const end = std.time.Instant.now() catch
+                return self.write_error("clocke error at fetch end");
 
             const since = end.since(start);
             if (since < UPDATE_INTERVAL_NANOSECONDS) {
@@ -203,7 +205,11 @@ pub fn run(
     status.result_loop();
 }
 
-fn test_widget(wg: *std.Thread.WaitGroup, result: *WidgetResult) void {
+fn test_widget(
+    wg: *std.Thread.WaitGroup, 
+    _: std.mem.Allocator, 
+    result: *WidgetResult
+) void {
     result.full_text = "test";
     result.min_width = .{ .pixels = 5 };
     wg.finish();
@@ -223,15 +229,15 @@ test "test calling widgets" {
     }
     self.update_results();
     for (self.widget_results) |res| {
-        const resJson = try std.json.stringifyAlloc(
-            std.testing.allocator,
-            res,
-            .{
-                .emit_null_optional_fields = false,
-            },
-        );
-        defer std.testing.allocator.free(resJson);
-        std.debug.print("{s}\n", .{resJson});
         try std.testing.expectEqual("test", res.full_text.?);
     }
+    const resJson = try std.json.stringifyAlloc(
+        std.testing.allocator,
+        self.widget_results,
+        .{
+            .emit_null_optional_fields = false,
+        },
+    );
+    defer std.testing.allocator.free(resJson);
+    std.debug.print("{s}\n", .{resJson});
 }
