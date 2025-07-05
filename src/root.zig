@@ -125,6 +125,11 @@ pub const WidgetFn = *const fn (
     result: *WidgetResult,
 ) anyerror!void;
 
+pub const FormatterFn = *const fn (
+    alloc: std.mem.Allocator,
+    results: []WidgetResult,
+) anyerror!void;
+
 const stdout = std.io.getStdOut().writer();
 
 pub fn Status(comptime widget_fns: anytype) type {
@@ -135,6 +140,7 @@ pub fn Status(comptime widget_fns: anytype) type {
         arena: std.heap.ArenaAllocator,
         widget_results: [widget_count]WidgetResult,
         widget_fns: [widget_count]WidgetFn,
+        formatter_fn: FormatterFn,
 
         pub fn deinit(self: *Self) void {
             self.arena.deinit();
@@ -212,6 +218,10 @@ pub fn Status(comptime widget_fns: anytype) type {
             const start = try std.time.Instant.now();
 
             try self.update_results();
+            try self.formatter_fn(
+                self.arena.allocator(),
+                &self.widget_results,
+            );
             try self.render_results();
             self.reset();
 
@@ -246,12 +256,14 @@ pub fn create(
     alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
     comptime widget_fns: anytype,
+    formatter_fn: FormatterFn,
 ) Status(widget_fns) {
     return .{
         .stdout = std.io.getStdOut().writer(),
         .arena = std.heap.ArenaAllocator.init(alloc),
         .widget_fns = widget_fns,
         .widget_results = std.mem.zeroes([widget_fns.len]WidgetResult),
+        .formatter_fn = formatter_fn,
     };
 }
 
@@ -259,8 +271,9 @@ pub fn run(
     alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
     comptime widget_fns: anytype,
+    formatter_fn: FormatterFn,
 ) !void {
-    var status = create(alloc, widget_fns);
+    var status = create(alloc, widget_fns, formatter_fn);
     try status.render_headers();
     try status.result_loop();
 }
@@ -271,6 +284,12 @@ fn test_widget(wg: *std.Thread.WaitGroup, _: std.mem.Allocator, result: *WidgetR
     wg.finish();
 }
 
+fn test_formatter(_: std.mem.Allocator, results: []WidgetResult) !void {
+    for (0..results.len) |i| {
+        results[i].background = "#FF0000";
+    }
+}
+
 test "test calling widgets" {
     var self = create(
         std.testing.allocator,
@@ -279,6 +298,7 @@ test "test calling widgets" {
             test_widget,
             test_widget,
         },
+        test_formatter,
     );
     try self.render_headers();
     self.reset();
@@ -289,6 +309,7 @@ test "test calling widgets" {
     for (self.widget_results) |res| {
         try std.testing.expectEqual("test", res.full_text.?);
     }
+    try self.formatter_fn(self.arena.allocator(), &self.widget_results);
     try self.render_results();
     self.deinit();
 }
