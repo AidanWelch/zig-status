@@ -6,7 +6,11 @@ fn formatter(
     results: []zig_status.WidgetResult,
 ) !void {
     for (0..results.len) |i| {
-        results[i].background = "#FF0000";
+        results[i].background = "#000000B2";
+        results[i].border = "#FFFFFF";
+        results[i].@"align" = "center";
+        results[i].separator = false;
+        results[i].separator_block_width = 0;
     }
 }
 
@@ -17,6 +21,7 @@ pub fn main() !void {
     defer _ = gpa.deinit();
 
     try zig_status.run(gpa.allocator(), [_]zig_status.WidgetFn{
+        zig_status.Widgets.sysinfo,
         zig_status.Widgets.clock,
     }, formatter);
 }
