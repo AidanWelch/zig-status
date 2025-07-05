@@ -54,10 +54,16 @@ pub fn sysinfo(
         .size = (info.totalram - info.freeram) * info.mem_unit,
     };
 
+
     result.full_text = try std.fmt.allocPrint(
         alloc,
         "RAM: {} / {}",
         .{ used_ram, total_ram },
     );
+    // has the potential to be "RAM: XXXX.XX UUU / XXXX.XX UUU"
+    result.min_width = .{
+        .string = "RAM: XXXX.XX UUU / XXXX.XX UUU"
+    };
+    
     wg.finish();
 }
