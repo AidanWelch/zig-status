@@ -21,7 +21,7 @@ const Memory = struct {
         var val = fsize;
         for (UNITS, 0..) |u, i| {
             const unit_val = std.math.pow(u64, 1024, i);
-            if (self.size / unit_val == 0) {
+            if (self.size < unit_val) {
                 break;
             }
             unit = u;
