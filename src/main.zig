@@ -20,7 +20,10 @@ pub fn main() !void {
     }).init;
     defer _ = gpa.deinit();
 
-    try zig_status.run(gpa.allocator(), [_]zig_status.WidgetFn{
+    const alloc = gpa.allocator();
+
+    try zig_status.run(alloc, [_]zig_status.Widget{
+        try zig_status.Widgets.create_battery(alloc),
         zig_status.Widgets.sysinfo,
         zig_status.Widgets.clock,
     }, formatter);

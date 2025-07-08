@@ -16,7 +16,7 @@ const OUTPUT_BUFFER_LENGTH = 18; // Calculate this based on the formatting
 // is NULL terminated, so you need to add 1
 // additional byte for that NULL byte
 
-pub fn clock(
+fn clock_fn(
     wg: *std.Thread.WaitGroup,
     alloc: std.mem.Allocator,
     result: *zig_status.WidgetResult,
@@ -52,3 +52,5 @@ pub fn clock(
     result.full_text = text[0..text_len];
     wg.finish();
 }
+
+pub const clock = zig_status.fnToWidget(clock_fn);

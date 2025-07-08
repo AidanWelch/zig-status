@@ -118,10 +118,15 @@ pub const WidgetResult = struct {
     markup: ?[]const u8,
 };
 
+pub const WidgetState = struct {
+    ptr: ?*anyopaque,
+    alloc: std.mem.Allocator,
+};
+
 // This function must always called `wg.finish()`
 pub const WidgetFn = *const fn (
     wg: *std.Thread.WaitGroup,
-    alloc: std.mem.Allocator,
+    temp_alloc: std.mem.Allocator, // This allocation is cleared on iteration
     result: *WidgetResult,
 ) anyerror!void;
 
@@ -130,20 +135,100 @@ pub const FormatterFn = *const fn (
     results: []WidgetResult,
 ) anyerror!void;
 
+pub const Widget = struct {
+    ptr: *anyopaque,
+
+    update_result_fn: *const fn (
+        *anyopaque,
+        wg: *std.Thread.WaitGroup,
+        temp_alloc: std.mem.Allocator,
+        result: *WidgetResult,
+    ) anyerror!void,
+
+    deinit_fn: *const fn (*anyopaque) void,
+
+    pub fn update_result(
+        self: *Widget,
+        wg: *std.Thread.WaitGroup,
+        temp_alloc: std.mem.Allocator,
+        result: *WidgetResult,
+    ) anyerror!void {
+        return self.update_result_fn(self.ptr, wg, temp_alloc, result);
+    }
+
+    pub fn deinit(self: *Widget) void {
+        self.deinit_fn(self.ptr);
+    }
+};
+
+pub fn ptrToWidget(ptr: anytype) Widget {
+    const T = @TypeOf(ptr);
+    comptime if (@typeInfo(T) != .pointer) {
+        @compileError("input must be a pointer to a struct with `update_result` and `deinit_fn`");
+    };
+
+    const func_wrapper = struct {
+        pub fn update_result(
+            self_ptr: *anyopaque,
+            wg: *std.Thread.WaitGroup,
+            temp_alloc: std.mem.Allocator,
+            result: *WidgetResult,
+        ) anyerror!void {
+            const self: T = @ptrCast(@alignCast(self_ptr));
+            return @typeInfo(T).pointer.child.update_result(self, wg, temp_alloc, result);
+        }
+
+        pub fn deinit(self_ptr: *anyopaque) void {
+            const self: T = @ptrCast(@alignCast(self_ptr));
+            return @typeInfo(T).pointer.child.deinit(self);
+        }
+    };
+
+    return .{
+        .ptr = ptr,
+        .update_result_fn = func_wrapper.update_result,
+        .deinit_fn = func_wrapper.deinit,
+    };
+}
+
+pub fn fnToWidget(comptime func: WidgetFn) Widget {
+    const func_wrapper = struct {
+        pub fn update_result(
+            _: *anyopaque,
+            wg: *std.Thread.WaitGroup,
+            temp_alloc: std.mem.Allocator,
+            result: *WidgetResult,
+        ) anyerror!void {
+            return func(wg, temp_alloc, result);
+        }
+
+        pub fn deinit(_: *anyopaque) void {}
+    };
+
+    return .{
+        .ptr = undefined,
+        .update_result_fn = func_wrapper.update_result,
+        .deinit_fn = func_wrapper.deinit,
+    };
+}
+
 const stdout = std.io.getStdOut().writer();
 
-pub fn Status(comptime widget_fns: anytype) type {
-    const widget_count = widget_fns_length(widget_fns);
+pub fn Status(widget_arr_t: type) type {
+    const widget_count = widgets_length(widget_arr_t);
     return comptime struct {
         const Self = @This();
         stdout: std.fs.File.Writer,
         arena: std.heap.ArenaAllocator,
         widget_results: [widget_count]WidgetResult,
-        widget_fns: [widget_count]WidgetFn,
+        widgets: [widget_count]Widget,
         formatter_fn: FormatterFn,
 
         pub fn deinit(self: *Self) void {
             self.arena.deinit();
+            for (0..self.widgets.len) |i| {
+                self.widgets[i].deinit();
+            }
         }
 
         pub fn reset(self: *Self) void {
@@ -192,7 +277,7 @@ pub fn Status(comptime widget_fns: anytype) type {
             var wg: std.Thread.WaitGroup = .{};
             for (0..widget_count) |i| {
                 wg.start();
-                try self.widget_fns[i](
+                try self.widgets[i].update_result(
                     &wg,
                     self.arena.allocator(),
                     &self.widget_results[i],
@@ -237,32 +322,32 @@ pub fn Status(comptime widget_fns: anytype) type {
     };
 }
 
-fn widget_fns_length(arr: anytype) comptime_int {
-    const type_info = @typeInfo(@TypeOf(arr));
+fn widgets_length(T: type) comptime_int {
+    const type_info = @typeInfo(T);
     switch (type_info) {
         .array => |array_type| {
-            if (array_type.child != WidgetFn) {
-                @compileError("the input array must be of WidgetFn function pointers");
+            if (array_type.child != Widget) {
+                @compileError("the input array must be of Widgets");
             }
             return array_type.len;
         },
         else => @compileError(
-            "widget_fns requires a comptime array of WidgetFn function pointers",
+            "the input requires a comptime array of Widgets",
         ),
     }
 }
 
 pub fn create(
     alloc: std.mem.Allocator,
-    // Should be an array of []WidgetFn
-    comptime widget_fns: anytype,
+    // Should be an array of []Widget
+    widgets: anytype,
     formatter_fn: FormatterFn,
-) Status(widget_fns) {
+) Status(@TypeOf(widgets)) {
     return .{
         .stdout = std.io.getStdOut().writer(),
         .arena = std.heap.ArenaAllocator.init(alloc),
-        .widget_fns = widget_fns,
-        .widget_results = std.mem.zeroes([widget_fns.len]WidgetResult),
+        .widgets = widgets,
+        .widget_results = std.mem.zeroes([widgets.len]WidgetResult),
         .formatter_fn = formatter_fn,
     };
 }
@@ -270,15 +355,19 @@ pub fn create(
 pub fn run(
     alloc: std.mem.Allocator,
     // Should be an array of []WidgetFn
-    comptime widget_fns: anytype,
+    widgets: anytype,
     formatter_fn: FormatterFn,
 ) !void {
-    var status = create(alloc, widget_fns, formatter_fn);
+    var status = create(alloc, widgets, formatter_fn);
     try status.render_headers();
     try status.result_loop();
 }
 
-fn test_widget(wg: *std.Thread.WaitGroup, _: std.mem.Allocator, result: *WidgetResult) !void {
+fn test_widget(
+    wg: *std.Thread.WaitGroup,
+    _: std.mem.Allocator,
+    result: *WidgetResult,
+) !void {
     result.full_text = "test";
     result.min_width = .{ .pixels = 5 };
     wg.finish();
@@ -293,10 +382,10 @@ fn test_formatter(_: std.mem.Allocator, results: []WidgetResult) !void {
 test "test calling widgets" {
     var self = create(
         std.testing.allocator,
-        [_]WidgetFn{
-            test_widget,
-            test_widget,
-            test_widget,
+        [_]Widget{
+            fnToWidget(test_widget),
+            fnToWidget(test_widget),
+            fnToWidget(test_widget),
         },
         test_formatter,
     );
