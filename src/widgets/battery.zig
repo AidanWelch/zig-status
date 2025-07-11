@@ -14,6 +14,8 @@ const Battery = struct {
         alloc: std.mem.Allocator,
         result: *zig_status.WidgetResult,
     ) !void {
+        defer wg.finish();
+        result.min_width = .{ .string = "100%, XXX:XX remaining" };
         var capacity_buffer: [3]u8 = undefined;
         var capacity = try self.ps_dir.readFile("capacity", &capacity_buffer);
         if (capacity.len > 0 and capacity[capacity.len - 1] == '\n') {
@@ -21,12 +23,16 @@ const Battery = struct {
         }
         var buffer: [64]u8 = undefined;
 
-        var is_charging = true;
         const status = try self.ps_dir.readFile("status", &buffer);
-        if (status.len >= 11 and
-            std.mem.eql(u8, "Discharging", status[0..11]))
+        if (status.len < 11 or
+            !std.mem.eql(u8, "Discharging", status[0..11]))
         {
-            is_charging = false;
+            result.full_text = try std.fmt.allocPrint(
+                alloc,
+                "{s}%, Charging",
+                .{ capacity }
+            );
+            return;
         }
 
         var charge_now_str = try self.ps_dir.readFile("charge_now", &buffer);
@@ -35,7 +41,7 @@ const Battery = struct {
         {
             charge_now_str.len -= 1;
         }
-        const charge_now = try std.fmt.parseInt(u64, charge_now_str, 10);
+        const charge_now = (try std.fmt.parseUnsigned(u64, charge_now_str, 10)) * 60;
 
         var current_now_str = try self.ps_dir.readFile("current_now", &buffer);
         if (current_now_str.len > 0 and
@@ -43,15 +49,23 @@ const Battery = struct {
         {
             current_now_str.len -= 1;
         }
-        const current_now = try std.fmt.parseInt(u64, current_now_str, 10);
-        result.full_text = try std.fmt.allocPrint(
-            alloc,
-            "{s}% and {}, charge_now: {d}, current_now: {d}",
-            .{ capacity, is_charging, charge_now, current_now },
-        );
-        result.min_width = .{ .string = "Called: 999999999999999999999999999" };
-
-        wg.finish();
+        const current_now = try std.fmt.parseUnsigned(u64, current_now_str, 10);
+        const total_minutes = charge_now / current_now;
+        const hours = total_minutes / 60;
+        const minutes = total_minutes % 60;
+        if (hours > 0) {
+            result.full_text = try std.fmt.allocPrint(
+                alloc,
+                "{s}%, {d}:{d} remaining",
+                .{ capacity, hours, minutes},
+            );
+        } else {
+            result.full_text = try std.fmt.allocPrint(
+                alloc,
+                "{s}%, {d} mins remaining",
+                .{ capacity, minutes},
+            );
+        }
     }
 
     pub fn deinit(self: *Battery) void {
