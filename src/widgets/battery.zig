@@ -29,7 +29,7 @@ const Battery = struct {
         {
             result.full_text = try std.fmt.allocPrint(
                 alloc,
-                "$ {s}%",
+                "⚡︎ {s}%",
                 .{ capacity }
             );
             return;
