@@ -1,37 +1,6 @@
 const std = @import("std");
 const zig_status = @import("../root.zig");
 
-// Must be in increasing order
-const UNITS = [_][]const u8{
-    "B",   "KiB", "MiB", "GiB", "TiB",
-    "PiB", "EiB", "ZiB", "YiB",
-};
-
-const Memory = struct {
-    size: u64,
-    pub fn format(
-        self: Memory,
-        comptime _: []const u8,
-        _: std.fmt.FormatOptions,
-        writer: anytype,
-    ) !void {
-        const fsize: f64 = @floatFromInt(self.size);
-
-        var unit = UNITS[0];
-        var val = fsize;
-        for (UNITS, 0..) |u, i| {
-            const unit_val = std.math.pow(u64, 1024, i);
-            if (self.size < unit_val) {
-                break;
-            }
-            unit = u;
-            val = fsize / @as(f64, @floatFromInt(unit_val));
-        }
-
-        try writer.print("{d:.2} {s}", .{ val, unit });
-    }
-};
-
 fn sysinfo_fn(
     wg: *std.Thread.WaitGroup,
     alloc: std.mem.Allocator,
@@ -47,20 +16,20 @@ fn sysinfo_fn(
         return error.UnknownSystemInfo;
     }
 
-    const total_ram = Memory{
-        .size = info.totalram * info.mem_unit,
-    };
-    const used_ram = Memory{
-        .size = (info.totalram - info.freeram) * info.mem_unit,
-    };
+    const total_ram = std.fmt.fmtIntSizeBin(
+        info.totalram * info.mem_unit,
+    );
+    const used_ram = std.fmt.fmtIntSizeBin(
+        (info.totalram - info.freeram) * info.mem_unit,
+    );
 
     result.full_text = try std.fmt.allocPrint(
         alloc,
-        "RAM: {} / {}",
+        "RAM: {:.2} / {:.2}",
         .{ used_ram, total_ram },
     );
-    // has the potential to be "RAM: XXXX.XX UUU / XXXX.XX UUU"
-    result.min_width = .{ .string = "RAM: XXXX.XX UUU / XXXX.XX UUU" };
+
+    result.min_width = .{ .string = "RAM: XXXX.XXUUU / XXXX.XXUUU" };
 
     wg.finish();
 }
