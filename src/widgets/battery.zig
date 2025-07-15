@@ -15,7 +15,7 @@ const Battery = struct {
         result: *zig_status.WidgetResult,
     ) !void {
         defer wg.finish();
-        result.min_width = .{ .string = "100%, XXX:XX remaining" };
+        result.min_width = .{ .string = " X 100% " };
         var capacity_buffer: [3]u8 = undefined;
         var capacity = try self.ps_dir.readFile("capacity", &capacity_buffer);
         if (capacity.len > 0 and capacity[capacity.len - 1] == '\n') {
@@ -29,43 +29,17 @@ const Battery = struct {
         {
             result.full_text = try std.fmt.allocPrint(
                 alloc,
-                "{s}%, Charging",
+                "$ {s}%",
                 .{ capacity }
             );
             return;
         }
 
-        var charge_now_str = try self.ps_dir.readFile("charge_now", &buffer);
-        if (charge_now_str.len > 0 and
-            charge_now_str[charge_now_str.len - 1] == '\n')
-        {
-            charge_now_str.len -= 1;
-        }
-        const charge_now = (try std.fmt.parseUnsigned(u64, charge_now_str, 10)) * 60;
-
-        var current_now_str = try self.ps_dir.readFile("current_now", &buffer);
-        if (current_now_str.len > 0 and
-            current_now_str[current_now_str.len - 1] == '\n')
-        {
-            current_now_str.len -= 1;
-        }
-        const current_now = try std.fmt.parseUnsigned(u64, current_now_str, 10);
-        const total_minutes = charge_now / current_now;
-        const hours = total_minutes / 60;
-        const minutes = total_minutes % 60;
-        if (hours > 0) {
-            result.full_text = try std.fmt.allocPrint(
-                alloc,
-                "{s}%, {d}:{d} remaining",
-                .{ capacity, hours, minutes},
-            );
-        } else {
-            result.full_text = try std.fmt.allocPrint(
-                alloc,
-                "{s}%, {d} mins remaining",
-                .{ capacity, minutes},
-            );
-        }
+        result.full_text = try std.fmt.allocPrint(
+            alloc,
+            "{s}%",
+            .{ capacity },
+        );
     }
 
     pub fn deinit(self: *Battery) void {
