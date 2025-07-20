@@ -23,6 +23,7 @@ pub fn main() !void {
     const alloc = gpa.allocator();
 
     try zig_status.run(alloc, [_]zig_status.Widget{
+        try zig_status.Widgets.create_brightness(alloc),
         try zig_status.Widgets.create_battery(alloc),
         zig_status.Widgets.sysinfo,
         zig_status.Widgets.clock,
