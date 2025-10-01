@@ -1,7 +1,7 @@
 const std = @import("std");
 pub const Widgets = @import("widgets/root.zig");
 
-const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s;
+const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s / 4;
 const ARENA_RETAIN_LIMIT: usize = 1024 * 1024; // retain 1mb
 
 const WidthInputTag = enum {
