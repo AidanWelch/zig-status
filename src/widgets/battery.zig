@@ -27,18 +27,14 @@ const Battery = struct {
         if (status.len < 11 or
             !std.mem.eql(u8, "Discharging", status[0..11]))
         {
-            result.full_text = try std.fmt.allocPrint(
-                alloc,
-                "⚡︎ {s}%",
-                .{ capacity }
-            );
+            result.full_text = try std.fmt.allocPrint(alloc, "⚡︎ {s}%", .{capacity});
             return;
         }
 
         result.full_text = try std.fmt.allocPrint(
             alloc,
             "{s}%",
-            .{ capacity },
+            .{capacity},
         );
     }
 

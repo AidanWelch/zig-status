@@ -212,13 +212,14 @@ pub fn fnToWidget(comptime func: WidgetFn) Widget {
     };
 }
 
-const stdout = std.io.getStdOut().writer();
+var writer_buf: [1024]u8 = undefined;
+var stdout_file_writer = std.fs.File.stdout().writer(&writer_buf);
 
 pub fn Status(widget_arr_t: type) type {
     const widget_count = widgets_length(widget_arr_t);
     return comptime struct {
         const Self = @This();
-        stdout: std.fs.File.Writer,
+        stdout: std.Io.Writer,
         arena: std.heap.ArenaAllocator,
         widget_results: [widget_count]WidgetResult,
         widgets: [widget_count]Widget,
@@ -255,7 +256,7 @@ pub fn Status(widget_arr_t: type) type {
         };
 
         pub fn render_headers(self: *Self) !void {
-            const json = try std.json.stringifyAlloc(
+            const json = try std.json.Stringify.valueAlloc(
                 self.arena.allocator(),
                 Header{
                     .version = 1,
@@ -269,6 +270,7 @@ pub fn Status(widget_arr_t: type) type {
             );
             defer _ = self.arena.reset(.free_all);
 
+            var stdout = &stdout_file_writer.interface;
             try stdout.writeAll(json);
             try stdout.writeAll("\n[");
         }
@@ -287,7 +289,7 @@ pub fn Status(widget_arr_t: type) type {
         }
 
         pub fn render_results(self: *Self) !void {
-            const resJson = try std.json.stringifyAlloc(
+            const resJson = try std.json.Stringify.valueAlloc(
                 self.arena.allocator(),
                 self.widget_results,
                 .{
@@ -295,6 +297,7 @@ pub fn Status(widget_arr_t: type) type {
                 },
             );
 
+            var stdout = &stdout_file_writer.interface;
             try stdout.writeAll(resJson);
             try stdout.writeByte(',');
         }
@@ -314,7 +317,7 @@ pub fn Status(widget_arr_t: type) type {
 
             const since = end.since(start);
             if (since < UPDATE_INTERVAL_NANOSECONDS) {
-                std.time.sleep(UPDATE_INTERVAL_NANOSECONDS - since);
+                std.Thread.sleep(UPDATE_INTERVAL_NANOSECONDS - since);
             }
 
             try self.result_loop();
@@ -344,7 +347,7 @@ pub fn create(
     formatter_fn: FormatterFn,
 ) Status(@TypeOf(widgets)) {
     return .{
-        .stdout = std.io.getStdOut().writer(),
+        .stdout = stdout_file_writer.interface,
         .arena = std.heap.ArenaAllocator.init(alloc),
         .widgets = widgets,
         .widget_results = std.mem.zeroes([widgets.len]WidgetResult),

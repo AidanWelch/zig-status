@@ -16,16 +16,12 @@ fn sysinfo_fn(
         return error.UnknownSystemInfo;
     }
 
-    const total_ram = std.fmt.fmtIntSizeBin(
-        info.totalram * info.mem_unit,
-    );
-    const used_ram = std.fmt.fmtIntSizeBin(
-        (info.totalram - info.freeram) * info.mem_unit,
-    );
+    const total_ram = info.totalram * info.mem_unit;
+    const used_ram = (info.totalram - info.freeram) * info.mem_unit;
 
     result.full_text = try std.fmt.allocPrint(
         alloc,
-        "RAM: {:.2} / {:.2}",
+        "RAM: {Bi:.2} / {Bi:.2}",
         .{ used_ram, total_ram },
     );
 

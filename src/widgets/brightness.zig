@@ -31,7 +31,7 @@ const Backlight = struct {
         result.full_text = try std.fmt.allocPrint(
             alloc,
             "🔆 {d:.0}%",
-            .{ (brightness/max_brightness) * 100 },
+            .{(brightness / max_brightness) * 100},
         );
     }
 
@@ -44,7 +44,7 @@ const Backlight = struct {
 const FB_BLANK_UNBLANK = '0';
 fn isBacklightDir(dir: std.fs.Dir) !bool {
     var buffer: [64]u8 = undefined;
-    
+
     const bl_power = try dir.readFile("bl_power", &buffer);
     if (bl_power.len == 0 or bl_power[0] != FB_BLANK_UNBLANK) {
         return false;
