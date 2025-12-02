@@ -1,7 +1,9 @@
 const std = @import("std");
 pub const Widgets = @import("widgets/root.zig");
 
-const UPDATE_INTERVAL_NANOSECONDS: u64 = std.time.ns_per_s / 4;
+const UPDATE_INTERVAL: std.Io.Duration = .{
+    .nanoseconds = std.time.ns_per_s / 4,
+};
 const ARENA_RETAIN_LIMIT: usize = 1024 * 1024; // retain 1mb
 
 const WidthInputTag = enum {
@@ -214,6 +216,7 @@ pub fn fnToWidget(comptime func: WidgetFn) Widget {
 
 var writer_buf: [1024]u8 = undefined;
 var stdout_file_writer = std.fs.File.stdout().writer(&writer_buf);
+const clock = std.Io.Clock.awake;
 
 pub fn Status(widget_arr_t: type) type {
     const widget_count = widgets_length(widget_arr_t);
@@ -224,12 +227,14 @@ pub fn Status(widget_arr_t: type) type {
         widget_results: [widget_count]WidgetResult,
         widgets: [widget_count]Widget,
         formatter_fn: FormatterFn,
+        threaded: std.Io.Threaded,
 
         pub fn deinit(self: *Self) void {
             self.arena.deinit();
             for (0..self.widgets.len) |i| {
                 self.widgets[i].deinit();
             }
+            self.threaded.deinit();
         }
 
         pub fn reset(self: *Self) void {
@@ -303,7 +308,8 @@ pub fn Status(widget_arr_t: type) type {
         }
 
         pub fn result_loop(self: *Self) !void {
-            const start = try std.time.Instant.now();
+            const io = self.threaded.ioBasic();
+            const next_run = (try clock.now(io)).addDuration(UPDATE_INTERVAL).withClock(clock);
 
             try self.update_results();
             try self.formatter_fn(
@@ -313,12 +319,7 @@ pub fn Status(widget_arr_t: type) type {
             try self.render_results();
             self.reset();
 
-            const end = try std.time.Instant.now();
-
-            const since = end.since(start);
-            if (since < UPDATE_INTERVAL_NANOSECONDS) {
-                std.Thread.sleep(UPDATE_INTERVAL_NANOSECONDS - since);
-            }
+            try next_run.wait(io);
 
             try self.result_loop();
         }
@@ -352,6 +353,7 @@ pub fn create(
         .widgets = widgets,
         .widget_results = std.mem.zeroes([widgets.len]WidgetResult),
         .formatter_fn = formatter_fn,
+        .threaded = std.Io.Threaded.init(alloc),
     };
 }
 

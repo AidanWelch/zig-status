@@ -10,9 +10,8 @@ fn sysinfo_fn(
     OutOfMemory,
 }!void {
     var info: std.os.linux.Sysinfo = undefined;
-    if (std.os.linux.E.init(
-        std.os.linux.sysinfo(&info),
-    ) != .SUCCESS) {
+    const err = std.os.linux.errno(std.os.linux.sysinfo(&info));
+    if (err != .SUCCESS) {
         return error.UnknownSystemInfo;
     }
 
