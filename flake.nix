@@ -17,7 +17,7 @@
       map(
         system: let
           pkgs = nixpkgs.legacyPackages.${system};
-          zig = zig-overlay.packages.${system}."0.15.2";
+          zig = zig-overlay.packages.${system}."0.16.0";
           target = builtins.replaceStrings ["darwin"] ["macos"] system;
           zig-status = pkgs.stdenvNoCC.mkDerivation {
             name = "zig-status";
