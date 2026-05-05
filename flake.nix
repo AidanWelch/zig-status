@@ -14,11 +14,10 @@
     zig-overlay,
   }:
     builtins.foldl' nixpkgs.lib.recursiveUpdate {} (
-      builtins.map
-      (
+      map(
         system: let
           pkgs = nixpkgs.legacyPackages.${system};
-          zig = zig-overlay.packages.${system}.master;
+          zig = zig-overlay.packages.${system}."0.15.2";
           target = builtins.replaceStrings ["darwin"] ["macos"] system;
           zig-status = pkgs.stdenvNoCC.mkDerivation {
             name = "zig-status";
