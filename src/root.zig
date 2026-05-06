@@ -127,7 +127,7 @@ pub const WidgetState = struct {
 
 // This function must always called `wg.finish()`
 pub const WidgetFn = *const fn (
-    wg: *std.Thread.WaitGroup,
+    wg: *std.Io.Group,
     temp_alloc: std.mem.Allocator, // This allocation is cleared on iteration
     result: *WidgetResult,
 ) anyerror!void;
@@ -142,7 +142,7 @@ pub const Widget = struct {
 
     update_result_fn: *const fn (
         *anyopaque,
-        wg: *std.Thread.WaitGroup,
+        wg: *std.Io.Group,
         temp_alloc: std.mem.Allocator,
         result: *WidgetResult,
     ) anyerror!void,
@@ -151,7 +151,7 @@ pub const Widget = struct {
 
     pub fn update_result(
         self: *Widget,
-        wg: *std.Thread.WaitGroup,
+        wg: *std.Io.Group,
         temp_alloc: std.mem.Allocator,
         result: *WidgetResult,
     ) anyerror!void {
@@ -172,7 +172,7 @@ pub fn ptrToWidget(ptr: anytype) Widget {
     const func_wrapper = struct {
         pub fn update_result(
             self_ptr: *anyopaque,
-            wg: *std.Thread.WaitGroup,
+            wg: *std.Io.Group,
             temp_alloc: std.mem.Allocator,
             result: *WidgetResult,
         ) anyerror!void {
@@ -197,7 +197,7 @@ pub fn fnToWidget(comptime func: WidgetFn) Widget {
     const func_wrapper = struct {
         pub fn update_result(
             _: *anyopaque,
-            wg: *std.Thread.WaitGroup,
+            wg: *std.Io.Group,
             temp_alloc: std.mem.Allocator,
             result: *WidgetResult,
         ) anyerror!void {
@@ -215,14 +215,13 @@ pub fn fnToWidget(comptime func: WidgetFn) Widget {
 }
 
 var writer_buf: [1024]u8 = undefined;
-var stdout_file_writer = std.fs.File.stdout().writer(&writer_buf);
 const clock = std.Io.Clock.awake;
 
 pub fn Status(widget_arr_t: type) type {
     const widget_count = widgets_length(widget_arr_t);
     return comptime struct {
         const Self = @This();
-        stdout: std.Io.Writer,
+        stdout: std.Io.File.Writer,
         arena: std.heap.ArenaAllocator,
         widget_results: [widget_count]WidgetResult,
         widgets: [widget_count]Widget,
@@ -275,22 +274,20 @@ pub fn Status(widget_arr_t: type) type {
             );
             defer _ = self.arena.reset(.free_all);
 
-            var stdout = &stdout_file_writer.interface;
-            try stdout.writeAll(json);
-            try stdout.writeAll("\n[");
+            try self.stdout.interface.writeAll(json);
+            try self.stdout.interface.writeAll("\n[");
         }
 
         pub fn update_results(self: *Self) !void {
-            var wg: std.Thread.WaitGroup = .{};
+            var wg = std.Io.Group.init;
             for (0..widget_count) |i| {
-                wg.start();
                 try self.widgets[i].update_result(
                     &wg,
                     self.arena.allocator(),
                     &self.widget_results[i],
                 );
             }
-            wg.wait();
+            try wg.await(self.threaded.io());
         }
 
         pub fn render_results(self: *Self) !void {
@@ -302,14 +299,13 @@ pub fn Status(widget_arr_t: type) type {
                 },
             );
 
-            var stdout = &stdout_file_writer.interface;
-            try stdout.writeAll(resJson);
-            try stdout.writeByte(',');
+            try self.stdout.interface.writeAll(resJson);
+            try self.stdout.interface.writeByte(',');
         }
 
         pub fn result_loop(self: *Self) !void {
-            const io = self.threaded.ioBasic();
-            const next_run = (try clock.now(io)).addDuration(UPDATE_INTERVAL).withClock(clock);
+            const io = self.threaded.io();
+            const next_run = (clock.now(io)).addDuration(UPDATE_INTERVAL).withClock(clock);
 
             try self.update_results();
             try self.formatter_fn(
@@ -347,13 +343,14 @@ pub fn create(
     widgets: anytype,
     formatter_fn: FormatterFn,
 ) Status(@TypeOf(widgets)) {
+    var threaded = std.Io.Threaded.init(alloc, .{});
     return .{
-        .stdout = stdout_file_writer.interface,
+        .threaded = threaded,
+        .stdout = std.Io.File.stdout().writer(threaded.io(), &writer_buf),
         .arena = std.heap.ArenaAllocator.init(alloc),
         .widgets = widgets,
         .widget_results = std.mem.zeroes([widgets.len]WidgetResult),
         .formatter_fn = formatter_fn,
-        .threaded = std.Io.Threaded.init(alloc),
     };
 }
 
@@ -369,7 +366,7 @@ pub fn run(
 }
 
 fn test_widget(
-    wg: *std.Thread.WaitGroup,
+    wg: *std.Io.Group,
     _: std.mem.Allocator,
     result: *WidgetResult,
 ) !void {
