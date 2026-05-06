@@ -15,7 +15,12 @@ fn formatter(
 }
 
 pub fn main() !void {
-    const alloc = std.heap.page_allocator;
+    var gpa = std.heap.GeneralPurposeAllocator(.{
+        .safety = false,
+    }).init;
+    defer _ = gpa.deinit();
+
+    const alloc = gpa.allocator();
 
     try zig_status.run(alloc, [_]zig_status.Widget{
         try zig_status.Widgets.create_brightness(alloc),

@@ -2,7 +2,7 @@ const std = @import("std");
 const zig_status = @import("../root.zig");
 
 fn sysinfo_fn(
-    _: *std.Io.Group,
+    wg: *std.Thread.WaitGroup,
     alloc: std.mem.Allocator,
     result: *zig_status.WidgetResult,
 ) error{
@@ -25,6 +25,8 @@ fn sysinfo_fn(
     );
 
     result.min_width = .{ .string = "RAM: XXXX.XXUUU / XXXX.XXUUU" };
+
+    wg.finish();
 }
 
 pub const sysinfo = zig_status.fnToWidget(sysinfo_fn);
