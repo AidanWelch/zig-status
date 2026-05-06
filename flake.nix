@@ -28,7 +28,7 @@
             src = self;
             buildPhase = ''
               PACKAGE_DIR=${pkgs.callPackage ./deps.nix {}}
-              zig build install --global-cache-dir $(pwd)/.cache --system $PACKAGE_DIR -Dtarget=${target} -Doptimize=ReleaseSafe --color off --prefix $out
+              zig build install --system $PACKAGE_DIR -Dtarget=${target} -Doptimize=ReleaseSafe --color off --prefix $out
             '';
             checkPhase = ''
               zig build test --global-cache-dir $(pwd)/.cache --system $PACKAGE_DIR -Dtarget=${target} --color off
