@@ -366,13 +366,12 @@ pub fn run(
 }
 
 fn test_widget(
-    wg: *std.Io.Group,
+    _: *std.Io.Group,
     _: std.mem.Allocator,
     result: *WidgetResult,
 ) !void {
     result.full_text = "test";
     result.min_width = .{ .pixels = 5 };
-    wg.finish();
 }
 
 fn test_formatter(_: std.mem.Allocator, results: []WidgetResult) !void {
