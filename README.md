@@ -1,3 +1,5 @@
+# Deprecated: I'm bored of this and nobody wants to use it anyways, so don't
+
 # zig-status
 A simple framework for generating i3bar and swaybar compatible status bars. 
 
